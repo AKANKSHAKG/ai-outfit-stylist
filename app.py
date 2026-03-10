@@ -1,13 +1,18 @@
 from flask import Flask, render_template, request
 import requests
 import random
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 
 # ---------------- API KEYS ----------------
 
-RAPID_API_KEY = "ee7328a924msh14393245e3df97bp19437fjsn3c67bcbd30f6"
-WEATHER_KEY = "8a6eebc2fa16e7e050c32d20ad11161b"
+RAPID_API_KEY = os.getenv("RAPID_API_KEY")
+WEATHER_KEY = os.getenv("WEATHER_KEY")
 
 AMAZON_URL = "https://real-time-amazon-data.p.rapidapi.com/search"
 
