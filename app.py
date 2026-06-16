@@ -2,6 +2,7 @@ from flask import Flask, render_template, request
 import requests
 import random
 import os
+import json
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -13,8 +14,10 @@ app = Flask(__name__)
 
 RAPID_API_KEY = os.getenv("RAPID_API_KEY")
 WEATHER_KEY = os.getenv("WEATHER_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 AMAZON_URL = "https://real-time-amazon-data.p.rapidapi.com/search"
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
 
 # ---------------- WEATHER FUNCTION ----------------
@@ -103,11 +106,11 @@ def generate_query(gender, mood, season):
             ],
 
             "formal": [
+                f"{season} blazer men",
                 f"{season} formal shirt men",
                 f"{season} office wear men",
                 f"{season} professional outfit men",
-                f"{season} business casual men",
-                f"{season} corporate attire men"
+                f"{season} business casual men"
             ],
 
             "wedding": [
@@ -162,13 +165,11 @@ def generate_query(gender, mood, season):
             ],
 
             "formal": [
+                f"{season} blazer women",
+                f"{season} formal blazer women",
                 f"{season} office wear women",
-                f"{season} formal outfit women",
                 f"{season} professional business attire women",
-                f"{season} corporate fashion women",
-                f"{season} formal blouse women",
-                f"{season} formal blaizer and trouser women",
-
+                f"{season} formal pantsuit women"
             ],
 
             "wedding": [
@@ -201,6 +202,61 @@ def generate_query(gender, mood, season):
     return random.choice(queries[gender][mood])
 
 
+# ---------------- AI STYLIST (Gemini) ----------------
+
+def ai_stylist(gender, mood, season, weather, temp, city):
+    """
+    Uses Gemini to reason over the weather + mood + occasion and produce
+    a smarter Amazon search query plus a short, human-readable styling note.
+
+    Falls back to the old random template logic (generate_query) if the
+    API call fails or the key isn't set - same graceful-degradation pattern
+    already used by get_weather().
+    """
+
+    prompt = f"""You are a fashion stylist. A {gender} person wants outfit ideas
+for a {mood} occasion in {city}. The current weather is {weather}, {temp}°C
+({season} season).
+
+Guidelines:
+- For "formal" occasions, always include a core structured piece - a blazer,
+  suit, or pantsuit - regardless of weather. Adjust the fabric for the
+  temperature (e.g. lightweight linen/cotton blazer in hot weather, wool
+  blazer in cold weather) instead of dropping the blazer altogether.
+- For other occasions, pick garments that genuinely suit both the mood and
+  the weather.
+- The search_query must name an actual garment type (e.g. "blazer", "kurta",
+  "dress", "joggers"), not just a vague style description.
+
+Respond with ONLY valid JSON, no markdown formatting, no code fences, in
+exactly this shape:
+{{"search_query": "a short Amazon search phrase, 5-8 words, for this outfit",
+"stylist_note": "a friendly 1-2 sentence note explaining why this outfit fits the weather and occasion"}}"""
+
+    try:
+        response = requests.post(
+            f"{GEMINI_URL}?key={GEMINI_API_KEY}",
+            headers={"Content-Type": "application/json"},
+            json={"contents": [{"parts": [{"text": prompt}]}]},
+            timeout=10
+        )
+
+        data = response.json()
+        text = data["candidates"][0]["content"]["parts"][0]["text"]
+
+        # strip accidental ```json fences just in case
+        text = text.strip().strip("`")
+        if text.startswith("json"):
+            text = text[4:].strip()
+
+        result = json.loads(text)
+
+        return result["search_query"], result["stylist_note"]
+
+    except Exception:
+        return generate_query(gender, mood, season), None
+
+
 # ---------------- MAIN ROUTE ----------------
 
 @app.route("/", methods=["GET", "POST"])
@@ -210,6 +266,7 @@ def home():
     weather = None
     temp = None
     maps_query = None
+    stylist_note = None
 
     if request.method == "POST":
 
@@ -226,7 +283,7 @@ def home():
         else:
             season = "summer"
 
-        query = generate_query(gender, mood, season)
+        query, stylist_note = ai_stylist(gender, mood, season, weather, temp, city)
 
         products = search_products(query)
 
@@ -237,7 +294,8 @@ def home():
         products=products,
         weather=weather,
         temp=temp,
-        maps_query=maps_query
+        maps_query=maps_query,
+        stylist_note=stylist_note
     )
 
 
