@@ -166,7 +166,9 @@ def generate_query(gender, mood, season):
                 f"{season} formal outfit women",
                 f"{season} professional business attire women",
                 f"{season} corporate fashion women",
-                f"{season} formal blouse women"
+                f"{season} formal blouse women",
+                f"{season} formal blaizer and trouser women",
+
             ],
 
             "wedding": [
